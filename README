@@ -14,14 +14,9 @@ Example:
 The simplest form is:
 # tar-glacier ~/
 
-This will archive your home directory using s3://tar-glacier to store metadata. The actual tar
-archives will be stored in a Glacier Vault named "tar-glacier-`hostname`-`date +%Y%m`". The 
-first time you run the command it will back up everything (a "level 0" backup.) For the rest
-of the month, additional executions will back up only changes since the initial backup ("level 1"
-backups.)
+This will archive your home directory using s3://tar-glacier to store metadata. The actual tar archives will be stored in a Glacier Vault named "tar-glacier-`hostname`-`date +%Y%m`". The first time you run the command it will back up everything (a "level 0" backup.) For the rest of the month, additional executions will back up only changes since the initial backup ("level 1" backups.)
 
-Note: all backups are either level 0 or level 1, meaning restoring a snapshot only requires the
-initial level 0 backup and a single level 1 backup. Intermediate level 1 backups are not needed.
+Note: all backups are either level 0 or level 1, meaning restoring a snapshot only requires the initial level 0 backup and a single level 1 backup. Intermediate level 1 backups are not needed.
 
 TODO:
 
