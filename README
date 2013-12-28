@@ -1,0 +1,32 @@
+tar-glacier
+
+Using old-school Unix tools to create incremental tar backups in Glacier.
+
+Simple usage:
+
+tar-glacier [-L <0|1>]        # Backup level
+            [-p <prefix> ]    # Backup prefix -- defaults to hostname
+	    [-s <s3 bucket> ] # S3 Bucket to store metadata -- defaults to s3://tar-glacier
+	    [pathname ...]    # Paths to be archived
+
+Example:
+
+The simplest form is:
+# tar-glacier ~/
+
+This will archive your home directory using s3://tar-glacier to store metadata. The actual tar
+archives will be stored in a Glacier Vault named "tar-glacier-`hostname`-`date +%Y%m`". The 
+first time you run the command it will back up everything (a "level 0" backup.) For the rest
+of the month, additional executions will back up only changes since the initial backup ("level 1"
+backups.)
+
+Note: all backups are either level 0 or level 1, meaning restoring a snapshot only requires the
+initial level 0 backup and a single level 1 backup. Intermediate level 1 backups are not needed.
+
+TODO:
+
+* Encrypt backups (Public Key with GPG).
+* Compress backups (probably not worth it at Glacier prices).
+* Resumable backups (stop backup and restart, error recovery, etc.)
+* Lots of error checking.
+* Restore from backup. (!!!)

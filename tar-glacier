@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# Prerequisites:
+#   awscli http://aws.amazon.com/cli/
+#   boto https://github.com/boto/boto
+#   gnutar
+
+# To do:
+#
+# - sync .snar file to S3 between executions
+# - name archives in order
+
+TAR_GLACIER_TIMESTAMP=$(date +%Y%m%d%H%M%S)
+TEMP_DIR="/tmp/tar-glacier.$$"
+ARCHIVE_SIZE="5G"
+S3_BUCKET="tar-glacier"
+BACKUP_PREFIX=`hostname`
+BACKUP_LEVEL=""
+
+mkdir -p $TEMP_DIR
+
+while getopts :L:p:s:g: opt; do
+    case $opt in
+        L) BACKUP_LEVEL="$OPTARG" ;;
+        p) BACKUP_PREFIX="$OPTARG" ;;
+        s) S3_BUCKET="$OPTARG" ;;
+    esac
+done
+
+shift $(($OPTIND - 1))
+
+MEMBERS="$*"
+
+BACKUP_PREFIX="$BACKUP_PREFIX-${TAR_GLACIER_TIMESTAMP:0:6}"
+GLACIER_VAULT="tar-glacier-$BACKUP_PREFIX"
+
+# Create S3 bucket (if needed)
+aws s3 ls s3://$S3_BUCKET >/dev/null 2>&1 || aws s3 mb s3://$S3_BUCKET
+
+# Download snapshot file from S3
+if [ "$BACKUP_LEVEL" == "0" ]; then
+    echo "Forcing level 0 backup." >&2
+
+elif aws s3 cp s3://$S3_BUCKET/$BACKUP_PREFIX.snar $TEMP_DIR/$BACKUP_PREFIX.snar >/dev/null 2>&1; then
+    echo "Snapshot exists. Doing a level 1 backup." >&2
+    BACKUP_LEVEL=1
+
+else
+    echo "No $BACKUP_PREFIX.snar in S3. Doing a level 0 backup." >&2
+    BACKUP_LEVEL=0
+fi
+
+echo BACKUP_LEVEL=$BACKUP_LEVEL
+echo BACKUP_PREFIX=$BACKUP_PREFIX
+echo S3_BUCKET=$S3_BUCKET
+echo GLACIER_VAULT=$GLACIER_VAULT
+
+export S3_BUCKET GLACIER_VAULT
+
+# Create muti-volume tar
+#   foreach .tar, upload to Glacier
+tar --create \
+    --multi-volume \
+    --file=$TEMP_DIR/${BACKUP_PREFIX}_${TAR_GLACIER_TIMESTAMP}_${BACKUP_LEVEL}.tar_01 \
+    --index-file=$TEMP_DIR/${BACKUP_PREFIX}_${TAR_GLACIER_TIMESTAMP}_${BACKUP_LEVEL}.index \
+    --verbose --verbose \
+    --tape-length=$ARCHIVE_SIZE \
+    --new-volume-script=./tg-new-volume \
+    --listed-incremental=$TEMP_DIR/$BACKUP_PREFIX.snar \
+    $MEMBERS 2>/dev/null
+
+# Copy .snar & .index to S3, for easy reference.
+
+# We only want to update the .snar file during a level 0 backup.
+if [ "$BACKUP_LEVEL" == "0" ]; then
+    aws s3 cp $TEMP_DIR/$BACKUP_PREFIX.snar s3://$S3_BUCKET/$BACKUP_PREFIX.snar
+    TAR_ARCHIVE=$TEMP_DIR/$BACKUP_PREFIX.snar ./tg-new-volume
+fi
+
+aws s3 cp $TEMP_DIR/${BACKUP_PREFIX}_${TAR_GLACIER_TIMESTAMP}_${BACKUP_LEVEL}.index \
+    s3://$S3_BUCKET/${BACKUP_PREFIX}_${TAR_GLACIER_TIMESTAMP}_${BACKUP_LEVEL}.index
+
+#   Copy last tar file, .snar & .index to GLACIER
+for TAR_ARCHIVE in $TEMP_DIR/*; do
+    TAR_ARCHIVE=$TAR_ARCHIVE ./tg-new-volume 
+done
+
+rmdir $TEMP_DIR

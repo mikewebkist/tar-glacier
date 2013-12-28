@@ -1,0 +1,17 @@
+#!/bin/bash
+# For this script it's advisable to use a shell, such as Bash,
+# that supports a TAR_FD value greater than 9.
+
+# Previous archive name in $TAR_ARCHIVE
+
+[ -d /tmp/GLACIER/$GLACIER_VAULT ] || mkdir -p /tmp/GLACIER/$GLACIER_VAULT
+
+echo "Moving $TAR_ARCHIVE to $GLACIER_VAULT"
+# cp $TAR_ARCHIVE /tmp/GLACIER/$GLACIER_VAULT/ && rm $TAR_ARCHIVE
+glacier upload $GLACIER_VAULT $TAR_ARCHIVE && rm $TAR_ARCHIVE
+
+if [ -n "$TAR_VOLUME" ]; then
+    new_name=${TAR_ARCHIVE%.tar*}.tar_$(printf "%2.2d" $TAR_VOLUME)
+    echo "Next volume: $new_name"
+    echo "$new_name" >&$TAR_FD
+fi
